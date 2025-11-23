@@ -95,7 +95,7 @@ services:
       POSTGRES_DB: ${POSTGRES_DB:-tempmail}
       POSTGRES_USER: ${POSTGRES_USER:-tempmail}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-      DATABASE_URL: postgresql://${POSTGRES_USER:-tempmail}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-tempmail}
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-tempmail}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-tempmail}
       
       # Redis
       REDIS_HOST: redis
@@ -178,6 +178,7 @@ services:
       APP_DOMAIN: ${APP_DOMAIN}
       SECRET_KEY: ${SECRET_KEY}
       ENCRYPTION_KEY: ${ENCRYPTION_KEY}
+      API_KEY: ${API_KEY}
       
       # Database
       POSTGRES_HOST: postgres
@@ -185,7 +186,7 @@ services:
       POSTGRES_DB: ${POSTGRES_DB:-tempmail}
       POSTGRES_USER: ${POSTGRES_USER:-tempmail}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-      DATABASE_URL: postgresql://${POSTGRES_USER:-tempmail}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-tempmail}
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-tempmail}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-tempmail}
       
       # Redis
       REDIS_HOST: redis
@@ -239,6 +240,7 @@ services:
       APP_ENV: ${APP_ENV:-production}
       SECRET_KEY: ${SECRET_KEY}
       ENCRYPTION_KEY: ${ENCRYPTION_KEY}
+      API_KEY: ${API_KEY}
       
       # Database
       POSTGRES_HOST: postgres
@@ -246,7 +248,7 @@ services:
       POSTGRES_DB: ${POSTGRES_DB:-tempmail}
       POSTGRES_USER: ${POSTGRES_USER:-tempmail}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-      DATABASE_URL: postgresql://${POSTGRES_USER:-tempmail}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-tempmail}
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-tempmail}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-tempmail}
       
       # Redis
       REDIS_HOST: redis
