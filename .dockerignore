@@ -1,0 +1,98 @@
+# Git
+.git
+.gitignore
+.gitattributes
+
+# CI/CD
+.github
+.gitlab-ci.yml
+.travis.yml
+
+# Documentation
+*.md
+README.md
+LICENSE
+docs/
+
+# Python
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.so
+*.egg
+*.egg-info
+dist
+build
+.pytest_cache
+.coverage
+htmlcov
+.tox
+.nox
+
+# Virtual Environment
+venv
+env
+ENV
+.venv
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Logs
+logs
+*.log
+
+# Database (local data)
+postgres_data
+redis_data
+*.db
+*.sqlite
+*.sqlite3
+
+# Testing
+tests/
+test_*.py
+*_test.py
+
+# Temporary
+tmp
+temp
+*.tmp
+*.temp
+
+# Backups
+*.bak
+*.backup
+backups
+
+# Node (if using any JS tools)
+node_modules
+npm-debug.log
+yarn-error.log
+
+# OS
+Thumbs.db
+.DS_Store
+
+# Docker
+docker-compose.override.yml
+Dockerfile.dev
+
+# Kubernetes
+k8s/*.local.yaml
+
+# Data
+data/
+uploads/

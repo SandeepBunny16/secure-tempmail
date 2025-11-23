@@ -1,0 +1,299 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:16-alpine
+    container_name: tempmail-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-tempmail}
+      POSTGRES_USER: ${POSTGRES_USER:-tempmail}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in .env}
+      POSTGRES_INITDB_ARGS: "--encoding=UTF-8 --lc-collate=C --lc-ctype=C"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./scripts/init-db.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-tempmail}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - tempmail-network
+    security_opt:
+      - no-new-privileges:true
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # Redis Cache & TTL Store
+  redis:
+    image: redis:7-alpine
+    container_name: tempmail-redis
+    restart: unless-stopped
+    command: >
+      redis-server
+      --appendonly yes
+      --requirepass ${REDIS_PASSWORD:?REDIS_PASSWORD must be set in .env}
+      --maxmemory 512mb
+      --maxmemory-policy allkeys-lru
+      --tcp-backlog 511
+      --timeout 300
+      --tcp-keepalive 60
+    volumes:
+      - redis_data:/data
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "--raw", "incr", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
+    networks:
+      - tempmail-network
+    security_opt:
+      - no-new-privileges:true
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # FastAPI Application
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: production
+      args:
+        PYTHON_VERSION: 3.11
+    container_name: tempmail-api
+    restart: unless-stopped
+    environment:
+      # Application
+      APP_ENV: ${APP_ENV:-production}
+      APP_NAME: ${APP_NAME:-SecureTempMail}
+      APP_HOST: ${APP_HOST:-0.0.0.0}
+      APP_PORT: ${APP_PORT:-8000}
+      APP_DOMAIN: ${APP_DOMAIN}
+      
+      # Security
+      SECRET_KEY: ${SECRET_KEY:?SECRET_KEY must be set in .env}
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY:?ENCRYPTION_KEY must be set in .env}
+      API_KEY: ${API_KEY:?API_KEY must be set in .env}
+      
+      # Database
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: ${POSTGRES_DB:-tempmail}
+      POSTGRES_USER: ${POSTGRES_USER:-tempmail}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      DATABASE_URL: postgresql://${POSTGRES_USER:-tempmail}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-tempmail}
+      
+      # Redis
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+      REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379/0
+      
+      # Email Settings
+      DEFAULT_TTL_HOURS: ${DEFAULT_TTL_HOURS:-24}
+      MAX_EMAILS_PER_INBOX: ${MAX_EMAILS_PER_INBOX:-50}
+      MAX_EMAIL_SIZE_MB: ${MAX_EMAIL_SIZE_MB:-10}
+      ADDRESS_LENGTH: ${ADDRESS_LENGTH:-24}
+      ADDRESS_PREFIX: ${ADDRESS_PREFIX:-tmp_}
+      
+      # Rate Limiting
+      RATE_LIMIT_PER_MINUTE: ${RATE_LIMIT_PER_MINUTE:-60}
+      RATE_LIMIT_PER_HOUR: ${RATE_LIMIT_PER_HOUR:-1000}
+      INBOX_CREATION_LIMIT_PER_HOUR: ${INBOX_CREATION_LIMIT_PER_HOUR:-10}
+      
+      # Logging
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      LOG_FORMAT: ${LOG_FORMAT:-json}
+      LOG_FILE: /app/logs/app.log
+      
+      # Security
+      ENABLE_CORS: ${ENABLE_CORS:-true}
+      CORS_ORIGINS: ${CORS_ORIGINS}
+      
+      # Monitoring
+      ENABLE_METRICS: ${ENABLE_METRICS:-true}
+      METRICS_PORT: ${METRICS_PORT:-9090}
+      
+    volumes:
+      - ./logs:/app/logs
+      - ./app/static:/app/app/static:ro
+    ports:
+      - "8000:8000"
+      - "9090:9090"  # Metrics
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - tempmail-network
+    security_opt:
+      - no-new-privileges:true
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "5"
+
+  # SMTP Server
+  smtp:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: production
+      args:
+        PYTHON_VERSION: 3.11
+    container_name: tempmail-smtp
+    restart: unless-stopped
+    command: python -m app.smtp.server
+    environment:
+      # SMTP Settings
+      SMTP_HOST: ${SMTP_HOST:-0.0.0.0}
+      SMTP_PORT: ${SMTP_PORT:-8025}
+      SMTP_HOSTNAME: ${APP_DOMAIN}
+      SMTP_ENABLE_STARTTLS: ${SMTP_ENABLE_STARTTLS:-true}
+      
+      # Application
+      APP_ENV: ${APP_ENV:-production}
+      APP_DOMAIN: ${APP_DOMAIN}
+      SECRET_KEY: ${SECRET_KEY}
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY}
+      
+      # Database
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: ${POSTGRES_DB:-tempmail}
+      POSTGRES_USER: ${POSTGRES_USER:-tempmail}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      DATABASE_URL: postgresql://${POSTGRES_USER:-tempmail}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-tempmail}
+      
+      # Redis
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+      REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379/0
+      
+      # Email Settings
+      MAX_EMAILS_PER_INBOX: ${MAX_EMAILS_PER_INBOX:-50}
+      MAX_EMAIL_SIZE_MB: ${MAX_EMAIL_SIZE_MB:-10}
+      
+      # Logging
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      LOG_FORMAT: ${LOG_FORMAT:-json}
+      LOG_FILE: /app/logs/smtp.log
+      
+    volumes:
+      - ./logs:/app/logs
+    ports:
+      - "8025:8025"  # Development SMTP port
+      # For production, map to port 25:
+      # - "25:8025"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - tempmail-network
+    security_opt:
+      - no-new-privileges:true
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "5"
+
+  # TTL Cleanup Worker
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: production
+      args:
+        PYTHON_VERSION: 3.11
+    container_name: tempmail-worker
+    restart: unless-stopped
+    command: python -m app.workers.ttl_cleanup
+    environment:
+      # Application
+      APP_ENV: ${APP_ENV:-production}
+      SECRET_KEY: ${SECRET_KEY}
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY}
+      
+      # Database
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: ${POSTGRES_DB:-tempmail}
+      POSTGRES_USER: ${POSTGRES_USER:-tempmail}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      DATABASE_URL: postgresql://${POSTGRES_USER:-tempmail}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-tempmail}
+      
+      # Redis
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+      REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379/0
+      
+      # Worker Settings
+      CLEANUP_INTERVAL_MINUTES: ${CLEANUP_INTERVAL_MINUTES:-5}
+      CLEANUP_BATCH_SIZE: ${CLEANUP_BATCH_SIZE:-100}
+      
+      # Logging
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      LOG_FORMAT: ${LOG_FORMAT:-json}
+      LOG_FILE: /app/logs/worker.log
+      
+    volumes:
+      - ./logs:/app/logs
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - tempmail-network
+    security_opt:
+      - no-new-privileges:true
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  postgres_data:
+    driver: local
+    name: tempmail_postgres_data
+  redis_data:
+    driver: local
+    name: tempmail_redis_data
+
+networks:
+  tempmail-network:
+    driver: bridge
+    name: tempmail_network
+    ipam:
+      driver: default
+      config:
+        - subnet: 172.28.0.0/16
+          gateway: 172.28.0.1
